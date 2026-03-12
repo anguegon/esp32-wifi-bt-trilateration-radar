@@ -10,13 +10,13 @@ This project implements a portable, real-time tracking system that combines:
 - YOLOv8 AI Computer Vision for object detection
 - Tactical HUD overlay on live camera feed
 
-The system runs entirely on a Raspberry Pi, acting as a standalone master node.
+The system runs entirely on the PC on Linux or in a RPi5 with 8/16GB RAM, acting as a standalone master node.
 
 ## 📡 1. Hardware & Network Requirements
 
 ### Frequency Limitation
 - 2.4GHz Only: The system exclusively captures MAC addresses on the 2.4GHz band (due to ESP32 hardware limits)
-- Required Network: You must have a dedicated 2.4GHz WiFi network where both ESP32 antennas and Raspberry Pi are connected
+- Required Network: You must have a dedicated 2.4GHz WiFi network where both ESP32 antennas and PC/RPi are connected
 
 ### ⚠️ Network Stability Warning
 - Do NOT use Mobile Hotspots: While smartphones offer 2.4GHz hotspots, this is strongly discouraged. Every restart or reconnection changes IP addresses, requiring manual updates to SERVER_IP in both radar_server.py and ESP32 firmware
@@ -67,7 +67,7 @@ Update these constants in your .ino files:
 
 ssid / password: Your WiFi credentials.
 
-server_ip: The static IP address of your Raspberry Pi.
+server_ip: The static IP address of your PC/RPi.
 
 ### B. Server Logic (radar_server.py)
 Edit the following for accurate position calculation:
@@ -96,7 +96,7 @@ Calculates coordinates and matches orientation with trilateration data.
 # Key configuration variables:
 LAT_ORIGIN, LON_ORIGIN = 0.0, 0.0  # Set your starting reference
 SYSTEM_AZIMUTH = 180  # Set orientation (0:East, 90:North, 180:West, 270:South)
-SERVER_IP = "192.168.1.XXX"  # Static IP of your Raspberry Pi
+SERVER_IP = "192.168.1.XXX"  # Static IP of your PC/RPi, use "ifconfig" on the cmd to see the WiFi LAN IP
 
 
 
@@ -106,7 +106,7 @@ Each ESP32 node needs to be configured with:
 // Important settings in firmware:
 const char* ssid = "YOUR_2.4GHz_NETWORK";
 const char* password = "YOUR_PASSWORD";
-const char* serverIP = "192.168.1.XXX";  // OS IP (you can see that using the command "ipconfig" on windows or "ifconfig" on Linux cmd) 
+const char* serverIP = "192.168.1.X.X";  # OS IP (you can see that using the command "ipconfig" on windows or "ifconfig" on Linux cmd) 
 const int serverPort = 8080;
 
 ## 📡 5. Technical Specifications of Antenna Nodes
@@ -154,7 +154,7 @@ pip install ultralytics opencv-python numpy
 The first time you run the vision script, it will automatically download yolov8n.pt (Nano version), optimized for Raspberry Pi's CPU/GPU.
 
 ## 🕶️ 7. Portability & Gaze Detection
-The system is designed for mobile use. By running everything on the Raspberry Pi:
+The system is designed for mobile use. By running everything on the Raspberry Pi 5:
 
 - Local Processing: No need for an external PC.
 - First-Person View (FPV): The radar_vision_local.py script draws the detected devices (MACs) directly onto the video feed from a camera mounted on your head/glasses.
