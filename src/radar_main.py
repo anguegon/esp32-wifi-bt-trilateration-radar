@@ -1,92 +1,72 @@
 import subprocess, os, time, sys, select
 
-# --- PATH CONFIGURATION ---
-BASE_DIR = "/home/your_user/.../radar_project"
-VENV_PYTHON = "/home/your_user/.../radar_project/venv_radar/bin/python3"
+# --- SILENCE LOGS ---
+os.environ['OPENCV_VIDEOIO_PRIORITY_BACKEND'] = 'V4L2'
+os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
+os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.*=false'
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+VENV_PYTHON = os.path.join(BASE_DIR, "venv_radar", "bin", "python3")
 SERVER_DATA = os.path.join(BASE_DIR, "radar_server.py")
 RADAR_VISION = os.path.join(BASE_DIR, "radar_vision_local.py")
 OBJ_FILE = os.path.join(BASE_DIR, "detected_targets.txt")
 PAUSE_FILE = os.path.join(BASE_DIR, ".pause")
 
 def configure_firewall_auto():
-    """Automatically opens port 50000 in the Ubuntu firewall."""
-    print("\033[1;33m[*] Configuring Firewall (Port 50000)...\033[0m")
+    print("\033[1;33m[*] Configuring Firewall...\033[0m")
     try:
-        # Executes sudo command so that if you already have permissions it won't ask for a password, 
-        # or it will only ask once at the beginning of the script.
-        subprocess.run(["sudo", "ufw", "allow", "50000/tcp"], check=True, stdout=subprocess.DEVNULL)
-        print("\033[1;32m[OK] Firewall configured successfully.\033[0m")
-    except Exception as e:
-        print(f"\033[1;31m[!] Firewall configuration error: {e}\033[0m")
+        subprocess.run(["sudo", "ufw", "allow", "50000/tcp"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo", "ufw", "allow", "5353/udp"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("\033[1;32m[OK] Firewall configured.\033[0m")
+    except: pass
 
-def launch_service(name, command_list, new_window=False, geometry="110x32", color="green"):
-    print(f"[*] Launching: {name}...")
+def launch_service(name, command_list, new_window=False, geometry="110x32", bg_color="#000000", fg_color="#00FF00"):
     if new_window:
-        cmd_str = " ".join(command_list)
-        # -sb enables scrollbar, -T sets the title
-        full_cmd = f"xterm -sb -sl 2000 -T '{name}' -bg black -fg {color} -geometry {geometry} -e 'bash -c \"{cmd_str}; exec bash\"'"
-        return subprocess.Popen(full_cmd, shell=True)
+        color_init = f"echo -ne '\\033]11;{bg_color}\\007\\033]10;{fg_color}\\007'; clear; "
+        full_command = f"{color_init} {' '.join(command_list)}; exec bash"
+        cmd = ["gnome-terminal", f"--geometry={geometry}", "--title=" + name, "--", "bash", "-c", full_command]
+        return subprocess.Popen(cmd)
     else:
-        return subprocess.Popen(command_list, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Aquí pasamos las variables de entorno para silenciar la visión AI
+        env = os.environ.copy()
+        env["OPENCV_LOG_LEVEL"] = "OFF"
+        return subprocess.Popen(command_list, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
-    # 0. Pre-system configuration
+    processes = []
+    paused = False
+    with open(PAUSE_FILE, "w") as f: f.write("0")
+
     configure_firewall_auto()
 
-    # 1. Initial cleanup of exchange files
-    for f_path in [PAUSE_FILE, OBJ_FILE]:
-        if os.path.exists(f_path): os.remove(f_path)
-        
-    with open(PAUSE_FILE, "w") as f: f.write("0")
-    with open(OBJ_FILE, "w") as f: f.write("WAITING FOR ANTENNA SIGNAL...")
-
-    processes = []
-    paused = False 
-
     try:
-        print("\033[1;34m" + "="*40)
-        print("    RADAR MASTER: ACCESS POINT MODE")
-        print("="*40 + "\033[0m")
-        print("[i] Press 'P' to Pause/Resume")
-        print("[i] Press 'Ctrl+C' to Exit")
-
-        # 2. LAUNCH SERVICES
+        processes.append(launch_service("TRAFFIC_HUD", [VENV_PYTHON, SERVER_DATA], True, "100x25", "#000000", "#00FF00"))
+        time.sleep(2)
+        processes.append(launch_service("TARGET_STATUS", [f"watch -n 1 -t cat {OBJ_FILE}"], True, "100x15", "#000000", "#FF3333"))
         
-        # Traffic Server (Now includes the antenna connection HUD)
-        # Launched with sudo to ensure full network permissions
-        processes.append(launch_service("TRAFFIC_AND_HUD", ["sudo", VENV_PYTHON, SERVER_DATA], True, "100x25", "green"))
-        
-        time.sleep(2) # Wait for the socket to open
-
-        # Object Monitor (Real-time text file watch)
-        processes.append(launch_service("TARGET_STATUS", [f"watch -n 1 -t cat {OBJ_FILE}"], True, "100x15", "red"))
-
-        # AI Vision (HUD over camera)
+        # Lanzamos la visión pero su salida está redirigida a DEVNULL (silencio absoluto)
         processes.append(launch_service("AI_VISION", [VENV_PYTHON, RADAR_VISION], False))
 
-        while True:
-            # Non-blocking keyboard input for remote system control
-            if select.select([sys.stdin], [], [], 0.1)[0]:
-                key = sys.stdin.readline().strip().lower()
-                
-                if key == 'p':
-                    paused = not paused
-                    with open(PAUSE_FILE, "w") as f:
-                        f.write("1" if paused else "0")
-                        
-                    if paused:
-                        print("\033[1;41;37m MODE: PAUSE \033[0m - Server on standby.")
-                    else:
-                        print("\033[1;42;37m MODE: ACTIVE \033[0m - Processing trilateration.")
+        print("\n" + "="*40)
+        print("\033[1;37m COMMANDS:\033[0m")
+        print("\033[1;32m [P] + Enter: PAUSE/RESUME Analysis\033[0m")
+        print("\033[1;31m [Ctrl+C]:    SHUTDOWN System\033[0m")
+        print("="*40)
+        print("\033[1;34m[*] Waiting for external device / Camera connection...\033[0m")
 
+        while True:
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                line = sys.stdin.readline().strip().lower()
+                if 'p' in line:
+                    paused = not paused
+                    with open(PAUSE_FILE, "w") as f: f.write("1" if paused else "0")
+                    status = "\033[1;41;37m PAUSE \033[0m" if paused else "\033[1;42;37m ACTIVE \033[0m"
+                    print(f"\r{status} - Press 'P' to toggle.   ", end="", flush=True)
             time.sleep(0.1)
             
     except KeyboardInterrupt:
-        print("\n\033[1;33m[*] Closing radar system and releasing ports...\033[0m")
-        for p in processes:
-            p.terminate()
-        
-        # Temporary file cleanup
-        if os.path.exists(PAUSE_FILE): os.remove(PAUSE_FILE)
-        print("[OK] System closed.")
+        print("\n\n\033[1;33m[*] Closing system...\033[0m")
+        for p in processes: p.terminate()
+        os.system("pkill -f radar_server.py")
+        os.system("pkill -f watch")
         sys.exit(0)

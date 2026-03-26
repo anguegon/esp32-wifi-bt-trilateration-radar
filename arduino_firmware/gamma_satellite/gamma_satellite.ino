@@ -3,21 +3,21 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <ESPmDNS.h> 
 
 // --- CONFIGURATION ---
-const char* ssid = "NET NAME";
-const char* password = "NET PASSWORD";
-const char* server_ip = "192.168.X.X";
+const char* ssid = "WIFI 2.4GHz NAME";
+const char* password = "PASSWORD";
+const char* host = "radar";             
 const int server_port = 50000;
+IPAddress serverIP;
 
-// --- BLUETOOTH VARIABLES ---
 BLEScan* pBLEScan;
-float scanTimeBT = 2.5; // Seconds
+float scanTimeBT = 2.5; 
 
 void setup() {
   Serial.begin(115200);
   
-  // WiFi configuration
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.print("Connecting Gamma...");
@@ -27,7 +27,10 @@ void setup() {
   }
   Serial.println("\n[OK] Gamma Online");
 
-  // --- INITIALIZATION BT  ---
+  if (!MDNS.begin("gamma")) {
+    Serial.println("Error mDNS");
+  }
+
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan(); 
   pBLEScan->setActiveScan(true);
@@ -35,37 +38,41 @@ void setup() {
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    WiFiClient client;
-    
-    if (client.connect(server_ip, server_port)) {
-      client.println("ID:GAMMA");
-      client.flush();
-      
-      // CYCLE 1: WIFI
-      Serial.println("[GAMMA] Scanning WiFi...");
-      int n = WiFi.scanNetworks();
-      for (int i = 0; i < n; ++i) {
-        String name = WiFi.SSID(i);
-        if (name == "") name = "Hide";
-        client.println(name + " | " + WiFi.BSSIDstr(i) + " | " + String(WiFi.RSSI(i)) + "dBm");
-      }
+    if (serverIP.toString() == "0.0.0.0" || serverIP.toString() == "(IP unset)") {
+      serverIP = MDNS.queryHost(host);
+    }
 
-      // CYCLE 2: BLUETOOTH (2.5 seconds)
-      Serial.println("[GAMMA] Scanning BT...");
-      BLEScanResults foundDevices = *pBLEScan->start(scanTimeBT, false);
-      for (int i = 0; i < foundDevices.getCount(); i++) {
-        BLEAdvertisedDevice device = foundDevices.getDevice(i);
-        String bName = String(device.getName().c_str());
-        if (bName == "") bName = "Disp_BT";
-        
-        client.println(bName + " | " + String(device.getAddress().toString().c_str()) + " | " + String(device.getRSSI()) + "dBm");
-      }
-      pBLEScan->clearResults(); // Important to avoid overloading the memory
+    if (serverIP.toString() != "0.0.0.0") {
+      WiFiClient client;
       
-      client.stop();
-      Serial.println("[OK] Gamma data sent.");
+      if (client.connect(serverIP, server_port)) {
+        client.println("ID:GAMMA");
+        client.flush();
+        
+        Serial.println("[GAMMA] Scanning WiFi...");
+        int n = WiFi.scanNetworks();
+        for (int i = 0; i < n; ++i) {
+          String name = WiFi.SSID(i);
+          if (name == "") name = "Hide";
+          client.println(name + " | " + WiFi.BSSIDstr(i) + " | " + String(WiFi.RSSI(i)) + "dBm");
+        }
+
+        Serial.println("[GAMMA] Scanning BT...");
+        BLEScanResults foundDevices = *pBLEScan->start(scanTimeBT, false);
+        for (int i = 0; i < foundDevices.getCount(); i++) {
+          BLEAdvertisedDevice device = foundDevices.getDevice(i);
+          String bName = String(device.getName().c_str());
+          if (bName == "") bName = "Disp_BT";
+          
+          client.println(bName + " | " + String(device.getAddress().toString().c_str()) + " | " + String(device.getRSSI()) + "dBm");
+        }
+        pBLEScan->clearResults();
+        client.stop();
+        Serial.println("[GAMMA] Radar data sent.");
+      } else {
+        serverIP = IPAddress(0,0,0,0);
+      }
     }
   }
-  // Short pause to avoid overloading the processor
-  delay(100); 
+  delay(5000); 
 }

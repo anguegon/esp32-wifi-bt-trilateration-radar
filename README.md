@@ -12,6 +12,16 @@ This project implements a portable, real-time tracking system that combines:
 
 The system runs entirely on the PC on Linux or in a RPi5 with 8/16GB RAM, acting as a standalone master node.
 
+## 🚀 Key Evolution: Zero-Config
+
+Unlike previous versions, this system no longer uses static IPs.
+
+- mDNS Discovery: The server broadcasts itself as "radar.local".
+
+- Plug & Play: Antennas find the server automatically, even if the subred or router changes.
+
+- Mandatory VENV: The Python Virtual Environment is now required to manage the zeroconf stack and system dependencies.
+
 ## 📡 1. Hardware & Network Requirements
 
 ### Frequency Limitation
@@ -67,8 +77,6 @@ Update these constants in your .ino files:
 
 ssid / password: Your WiFi credentials.
 
-server_ip: The static IP address of your PC/RPi.
-
 ### B. Server Logic (radar_server.py)
 Edit the following for accurate position calculation:
 
@@ -76,14 +84,28 @@ LAT_ORIGIN / LON_ORIGIN: GPS coordinates of your ALPHA antenna.
 
 AZIMUTH_SISTEMA: Define the system heading (0° East, 90° North, 180° West, 270° South).
 
-POSICIONES_ANTENAS: Define distances in meters relative to ALPHA (0,0).
+ANTENNA_POSITIONS: Define distances in meters relative to ALPHA (0,0).
 
-## ⚙️ 4. Core System Components (You have to MODIFY the data in order to match you)
+## ⚙️ 4. Core System Components
 
 ### A. The Master Controller (radar_main.py)
 This script manages the entire system lifecycle, launching the server and HUD windows.
 
-# Launch command: sudo python3 radar_main.py
+# Launch commands
+
+### Create the environment
+## 1. python3 -m venv venv_radar
+## 2. source venv_radar/bin/activate
+### Install core dependencioes
+## 3. ./venv_radar/bin/pip install zeroconf ultralytics opencv-python numpy 
+### For the visual interface to function correctly with separate windows, it is necessary to have installed `gnome-terminal`:
+## 4. sudo apt update && sudo apt install gnome-terminal -y
+
+############################################################################################
+### Execute
+# 5. ./venv_radar/bin/python3 radar_main.py
+############################################################################################
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VENV_PYTHON = os.path.join(BASE_DIR, "venv_radar/bin/python3")
@@ -96,18 +118,15 @@ Calculates coordinates and matches orientation with trilateration data.
 # Key configuration variables:
 LAT_ORIGIN, LON_ORIGIN = 0.0, 0.0  # Set your starting reference
 SYSTEM_AZIMUTH = 180  # Set orientation (0:East, 90:North, 180:West, 270:South)
-SERVER_IP = "192.168.1.XXX"  # Static IP of your PC/RPi, use "ifconfig" on the cmd to see the WiFi LAN IP
-
 
 
 ### C. ESP32 Firmware Configuration
 Each ESP32 node needs to be configured with:
 
 // Important settings in firmware:
-const char* ssid = "YOUR_2.4GHz_NETWORK";
+const char* ssid = "YOUR_2.4GHz_WIFI_NETWORK";
 const char* password = "YOUR_PASSWORD";
-const char* serverIP = "192.168.1.X.X";  # OS IP (you can see that using the command "ipconfig" on windows or "ifconfig" on Linux cmd) 
-const int serverPort = 8080;
+const char* host = "radar"; // Will resolve to radar.local
 
 ## 📡 5. Technical Specifications of Antenna Nodes
 The system uses three ESP32 nodes, each programmed with a unique specialized firmware to balance network scanning and traffic analysis.
@@ -141,7 +160,7 @@ Hardware Task: Constant environment scanning and remote reporting to the master 
 # 1. Navigate to the project folder
 cd ~/radar_project
 
-# 2. Create and activate the environment
+# 2. Create and activate the environment (if you didn't do this before)
 python3 -m venv venv_radar
 source venv_radar/bin/activate
 
@@ -161,6 +180,8 @@ The system is designed for mobile use. By running everything on the Raspberry Pi
 - Relative Positioning: By knowing your position via trilateration and your azimuth (heading), the system can calculate if a detected signal is in front of you or behind you.
 
 ## 🔒 8. Security & SSH
+The system uses Private IP networking. Although the server uses a hostname (radar.local), it is only accessible within your local WiFi. It is not exposed to the public internet.
+
 If you need to manage the Raspberry Pi remotely from another laptop while it's "in the field":
 
 1. Generate keys:

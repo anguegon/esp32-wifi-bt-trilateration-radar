@@ -3,12 +3,14 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <ESPmDNS.h> 
 
-// WiFi configuration (Modify)
-const char* ssid = "NET NAME";
-const char* password = "NET PASSWORD";
-const char* server_ip = "192.168.X.X"; 
+// --- CONFIGURATION ---
+const char* ssid = "WIFI 2.4GHz NAME";
+const char* password = "PASSWORD";
+const char* host = "radar";             
 const int server_port = 50000;
+IPAddress serverIP;
 
 // BLE configuration
 int scanTime = 2.5; // 2500ms for Bluetooth
@@ -24,6 +26,10 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\n[+] WiFi Connected");
+
+  if (!MDNS.begin("alfa")) {
+    Serial.println("Error mDNS");
+  }
 
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan(); 
@@ -52,19 +58,22 @@ void loop() {
   }
   pBLEScan->clearResults();
 
-  // --- ROUND 3: SEND TO THE SERVER ---
-  sendData(payload);
+  if (WiFi.status() == WL_CONNECTED) {
+    if (serverIP.toString() == "0.0.0.0" || serverIP.toString() == "(IP unset)") {
+      serverIP = MDNS.queryHost(host);
+    }
 
-  delay(10000); // Wait 10 seconds until the next big cycle
-}
-
-void sendData(String data) {
-  WiFiClient client;
-  if (client.connect(server_ip, server_port)) {
-    client.print(data);
-    client.stop();
-    Serial.println("[+] Data sent successfully.");
-  } else {
-    Serial.println("[!] Error: Could not connect to the Python server.");
+    if (serverIP.toString() != "0.0.0.0") {
+      WiFiClient client;
+      if (client.connect(serverIP, server_port)) {
+        client.print(payload);
+        client.stop();
+        Serial.println("[ALFA] Radar data sent.");
+      } else {
+        serverIP = IPAddress(0,0,0,0);
+      }
+    }
   }
+
+  delay(5000);
 }

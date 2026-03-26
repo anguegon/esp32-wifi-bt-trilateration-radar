@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Entorno virtual (MANDATORIO ignorar)
+venv_radar/
+__pycache__/
+
+# Archivos temporales y de datos
+detected_targets.txt
+.pause
+
+# Otros
+.DS_Store
+*.pyc
